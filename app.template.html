@@ -54,7 +54,8 @@
 
 <section class="view" id="v-any">
   <div class="card"><h2>Compare any two teams (not on the schedule)</h2>
-    <div class="row"><div><small class="sub" style="display:block;margin:0 0 3px">Team A</small><select id="anyA"></select></div><div><small class="sub" style="display:block;margin:0 0 3px">Team B</small><select id="anyB"></select></div></div>
+    <div class="row"><div><small class="sub" style="display:block;margin:0 0 3px">Team A</small><input id="anyA" list="teamlist" placeholder="type to search"></div><div><small class="sub" style="display:block;margin:0 0 3px">Team B</small><input id="anyB" list="teamlist" placeholder="type to search"></div></div>
+    <datalist id="teamlist"></datalist>
     <div class="row"><select id="anyBo"><option value="1">Bo1</option><option value="3" selected>Bo3</option><option value="5">Bo5</option></select><select id="anyTier"><option value="1">Tier S/A</option><option value="2">Tier A</option><option value="3" selected>Tier B</option><option value="4">Tier C</option><option value="5">Tier D</option></select></div>
     <button class="p" id="anyGo">Compare</button>
     <p class="sub" style="margin:8px 0 0">Uses each team's last-known lineup. Enter the bookmaker odds on the card to get the edge and stake.</p></div>
@@ -66,7 +67,11 @@
   <div class="card"><h2>How a prediction is made</h2><p class="sub" style="margin:0">Every team has an Elo (entry rating depends on the tier of events it plays, tier-1 results count more, shorter stomps count more than long grinds, idle teams regress), and every player has an Elo. The model also uses strength of schedule, average tier played, last-10 form, head-to-head, rest, experience, and how much of the expected lineup played the team's last match. A logistic model fitted on past pro games turns that into a single-game win probability, which is converted to the series (Bo1/Bo3/Bo5) and then blended with the market price using weights fitted on past matches. The roster panel shows who is expected to play, each player's rank among all rated players, who is in or out since the last match, and how many games this exact five has played together. Stakes are quarter-Kelly on the blended probability, capped at 2u; any edge above 8% is treated as suspicious and capped at 0.5u because a model this accurate does not find 8% edges, stale inputs do.</p></div>
 </section>
 
-<script src="__MODEL_URL__" onerror="window.__modelFailed=1"></script>
+<script>
+/* load the published model, with a changing query so the phone never serves yesterday's copy from its cache */
+(function(){ var u="__MODEL_URL__"; if(!u) return; var v=new Date(); var tag=v.getUTCFullYear()+""+(v.getUTCMonth()+1)+""+v.getUTCDate()+""+v.getUTCHours();
+  document.write('<script src="'+u+(u.indexOf("?")<0?"?":"&")+"v="+tag+'" onerror="window.__modelFailed=1"><\/script>'); })();
+</script>
 <script>
 var BAKED = __MODEL_JSON__;
 var M = BAKED;
@@ -201,9 +206,21 @@ function rosterOf(t){ var T=M.teams[t];
   if(T.report&&T.report.expected&&T.report.expected.length){ var r=JSON.parse(JSON.stringify(T.report)); r.any=true; r.known=false; return r; }
   var last=T.roster||[]; var exp=last.map(function(p){ return {id:p,name:(M.player_names||{})[String(p)]||("player "+p),elo:M.players[String(p)]!=null?M.players[String(p)]:T.elo,rank:(M.player_ranks||{})[String(p)]||null,of:M.players_ranked||0,maps:99,team:t}; });
   return {expected:exp,in:[],out:[],known:false,any:true,games_together:0,days_together:0,best_lineup_games:0,new_to_team:[],stand_in:false}; }
-(function(){ var ids=Object.keys(M.teams).sort(function(x,y){ return M.teams[x].name.localeCompare(M.teams[y].name); }); var opts=ids.map(function(t){ return '<option value="'+t+'">'+M.teams[t].name+' ('+Math.round(M.teams[t].elo)+')</option>'; }).join("");
-  $("anyA").innerHTML=opts; $("anyB").innerHTML=opts; if(ids.length>1) $("anyB").selectedIndex=1; var saved=get("any_last"); if(saved){ $("anyA").value=saved.a; $("anyB").value=saved.b; $("anyBo").value=saved.bo; $("anyTier").value=saved.tier; } })();
-function renderAny(){ var a=$("anyA").value, b=$("anyB").value; if(!a||!b||a===b){ $("anyCards").innerHTML='<div class="card empty">Pick two different teams.</div>'; return; } var bo=+$("anyBo").value, tier=+$("anyTier").value; put("any_last",{a:a,b:b,bo:bo,tier:tier});
+var NAME2ID={};
+(function(){ var ids=Object.keys(M.teams).sort(function(x,y){ return M.teams[y].elo-M.teams[x].elo; });
+  var seen={}, opts="";
+  ids.forEach(function(t){ var n=M.teams[t].name||("team "+t); var label=n+" ("+Math.round(M.teams[t].elo)+")";
+    if(seen[label]) label=n+" ("+Math.round(M.teams[t].elo)+", #"+t+")"; seen[label]=1;
+    NAME2ID[label]=t; if(!NAME2ID[n.toLowerCase()]) NAME2ID[n.toLowerCase()]=t;
+    opts+='<option value="'+label.replace(/"/g,"&quot;")+'">'; });
+  $("teamlist").innerHTML=opts; var saved=get("any_last"); if(saved){ $("anyA").value=saved.la||""; $("anyB").value=saved.lb||""; $("anyBo").value=saved.bo; $("anyTier").value=saved.tier; } })();
+function teamId(v){ v=(v||"").trim(); if(!v) return null; if(NAME2ID[v]) return NAME2ID[v]; var lv=v.toLowerCase(); if(NAME2ID[lv]) return NAME2ID[lv];
+  var hit=Object.keys(M.teams).filter(function(t){ return (M.teams[t].name||"").toLowerCase()===lv; })[0]; if(hit) return hit;
+  hit=Object.keys(M.teams).filter(function(t){ return (M.teams[t].name||"").toLowerCase().indexOf(lv)===0; })[0]; return hit||null; }
+function renderAny(){ var la=$("anyA").value, lb=$("anyB").value; var a=teamId(la), b=teamId(lb);
+  if(!a||!b){ $("anyCards").innerHTML='<div class="card empty">'+(la&&!a?'No team matching "'+la+'".':(lb&&!b?'No team matching "'+lb+'".':'Type two team names.'))+'</div>'; return; }
+  if(a===b){ $("anyCards").innerHTML='<div class="card empty">Pick two different teams.</div>'; return; }
+  var bo=+$("anyBo").value, tier=+$("anyTier").value; put("any_last",{a:a,b:b,la:la,lb:lb,bo:bo,tier:tier});
   var u={id:"any:"+a+":"+b,ts:Date.now()/1000+3600,a:a,b:b,bo:bo,tier:tier,event:"Any two (not on the schedule)",name:"",roster_a:rosterOf(a),roster_b:rosterOf(b),any:true}; $("anyCards").innerHTML=""; cardFor(u,$("anyCards"),null,"any"); bindOdds(); }
 $("anyGo").onclick=renderAny;
 
