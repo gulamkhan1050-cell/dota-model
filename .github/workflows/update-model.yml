@@ -1,9 +1,11 @@
+# Runs the trainer on GitHub's servers and publishes model.js.
+# The phone app reads that file, so nothing needs installing or rebuilding.
 name: update model
 
 on:
   schedule:
-    - cron: "0 5 * * *"
-  workflow_dispatch:
+    - cron: "0 5 * * *"        # 05:00 UTC daily. Change the hour if you want.
+  workflow_dispatch:            # also lets you run it by hand from the GitHub app
 
 permissions:
   contents: write
@@ -21,6 +23,7 @@ jobs:
 
       - run: pip install requests numpy
 
+      # keep the downloaded match history between runs so each day only fetches what is new
       - uses: actions/cache@v4
         with:
           path: cache_dota
@@ -44,3 +47,9 @@ jobs:
           git add -f model.js
           git diff --staged --quiet || git commit -m "model $(date -u +%Y-%m-%d)"
           git push
+
+      # jsDelivr caches branch files for up to 12 hours; ask it to fetch the new one now
+      - name: Refresh the CDN copy
+        run: |
+          sleep 5
+          curl -s "https://purge.jsdelivr.net/gh/${{ github.repository }}@main/model.js" || true
