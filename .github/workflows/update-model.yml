@@ -4,7 +4,7 @@ name: update model
 
 on:
   schedule:
-    - cron: "0 5 * * *"        # 05:00 UTC daily. Change the hour if you want.
+    - cron: "30 4,10 * * *"        # 05:00 UTC daily. Change the hour if you want.
   workflow_dispatch:            # also lets you run it by hand from the GitHub app
 
 permissions:
