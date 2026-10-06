@@ -1,0 +1,19 @@
+# Keeps the Esports Intel server on Render's free plan awake (it sleeps after 15 minutes without visitors),
+# so the app opens at once and odds are recorded every 10 minutes for line movement.
+# GitHub may start a scheduled run a few minutes late; that is fine for this.
+name: keep esports-intel awake
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Wake the server
+        run: curl -fsS --max-time 120 https://esports-intel.onrender.com/api/health || echo "server did not answer (deploying or restarting?)"
+      - name: Prepare the Upcoming list
+        run: curl -fsS -o /dev/null --max-time 120 "https://esports-intel.onrender.com/api/upcoming?hours=24" || true
