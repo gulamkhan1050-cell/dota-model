@@ -1,0 +1,7 @@
+android/build/
+android/keystore.jks
+app.html
+apk-upload.zip
+model.json
+cache_dota/
+__pycache__/
