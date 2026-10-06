@@ -4,9 +4,8 @@
 #   https://github.com/gulamkhan1050-cell/dota-model/releases/latest/download/dota2-model.apk
 # The daily model needs no new APK: the app downloads model.js (published by "update model") by itself.
 #
-# Signing: a phone only installs an update over the old app when both are signed with the same key.
-# Add your key once as repository secrets ANDROID_KEYSTORE_BASE64 (base64 of keystore.jks) and
-# ANDROID_KEYSTORE_PASS. Without them each build gets a new key (uninstall the old app first).
+# Signing: uses android/keystore.jks from the repo, so every build updates the installed app in place.
+# (Secrets ANDROID_KEYSTORE_BASE64 / ANDROID_KEYSTORE_PASS, if set, replace it.)
 name: build apk
 
 on:

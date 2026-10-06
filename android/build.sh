@@ -6,8 +6,8 @@
 #   DX_JAR      https://repo1.maven.org/maven2/com/jakewharton/android/repackaged/dalvik-dx/16.0.1/dalvik-dx-16.0.1.jar
 #   APKSIG_JAR  https://repo1.maven.org/maven2/com/android/tools/build/apksig/2.3.0/apksig-2.3.0.jar
 # The page itself comes from ../app.html (run build.py first); it is packed in as assets/index.html.
-# Signing key: android/keystore.jks (git-ignored; created on first build). A phone only installs an update
-# signed with the same key, so keep it (on GitHub: secret ANDROID_KEYSTORE_BASE64, see build-apk.yml).
+# Signing key: android/keystore.jks, kept in the repo (owner's choice) so every build, here or on GitHub,
+# installs as an update over the app already on the phone (a phone only accepts the same key).
 set -e
 cd "$(dirname "$0")"
 : "${AAPT2:?set AAPT2}" "${ANDROID_JAR:?set ANDROID_JAR}" "${DX_JAR:?set DX_JAR}" "${APKSIG_JAR:?set APKSIG_JAR}"
