@@ -1,10 +1,10 @@
-# Every Monday: retune the model on the newest results, retrain, and publish the next app version (1.1, 1.2, ...).
+# Every 3 days: retune the model on the newest results, retrain, and publish the next app version (1.1, 1.2, ...).
 # The app opens the published page (app.shell.html) when online, so the new version arrives without a new APK.
-name: weekly release
+name: release every 3 days
 
 on:
   schedule:
-    - cron: "15 3 * * 1"         # Monday 08:45 India
+    - cron: "15 3 */3 * *"       # every 3 days, 08:45 India
   workflow_dispatch:             # also lets you release by hand
 
 permissions:

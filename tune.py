@@ -1,5 +1,5 @@
 """
-tune.py - the weekly retune, run by the weekly release before the trainer.
+tune.py - the retune every 3 days, run by the release every 3 days before the trainer.
 
 Re-checks the rating and model settings against the most recent results: for every combination of team K,
 player K and ridge strength it rebuilds the ratings, fits the model on the older 80% of games and scores it
