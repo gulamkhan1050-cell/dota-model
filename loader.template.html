@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#1A1412">
+<title>Dota 2 predictor</title>
+<style>body{background:#1A1714;color:#A79D92;font:15px/1.45 system-ui,sans-serif;padding:24px}</style>
+</head>
+<body>
+<p>Opening the newest version&hellip;</p>
+<!-- The APK's start page (app v__VERSION__). Online it opens the page published every week (app.shell.html), so new
+     versions arrive without reinstalling; offline it opens the last page it saw, or the copy built into the APK.
+     window.__APK_BAKED is the model built into the APK: the page uses it when the daily model.js cannot be downloaded. -->
+<script>window.__APK_BAKED = __MODEL_JSON__; window.__APK_VERSION = "__VERSION__";</script>
+<script id="baked" type="text/plain">__SHELL_B64__</script>
+<script>
+(function(){
+  var SHELL = "__SHELL_URL__";
+  function show(html){ document.open(); document.write(html); document.close(); }
+  function saved(){ try{ return localStorage.getItem("shell_html"); }catch(e){ return null; } }
+  function builtIn(){ var b = document.getElementById("baked").textContent.replace(/\s/g, ""); return decodeURIComponent(escape(atob(b))); }
+  var done = false;
+  function fallback(){ if(done) return; done = true; show(saved() || builtIn()); }
+  var timer = setTimeout(fallback, 8000);                    // slow network: do not keep the phone waiting
+  var d = new Date(), tag = d.getUTCFullYear() + "" + (d.getUTCMonth() + 1) + "" + d.getUTCDate() + "" + d.getUTCHours();
+  fetch(SHELL + "?v=" + tag, {cache: "no-store"}).then(function(r){ if(!r.ok) throw new Error(r.status); return r.text(); }).then(function(h){
+    if(h.indexOf("__APK_BAKED") < 0) throw new Error("not the app page");
+    try{ localStorage.setItem("shell_html", h); }catch(e){}
+    if(!done){ done = true; clearTimeout(timer); show(h); }
+  }).catch(function(){ clearTimeout(timer); fallback(); });
+})();
+</script>
+</body>
+</html>

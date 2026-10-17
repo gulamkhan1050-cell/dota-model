@@ -1,0 +1,65 @@
+# Every Monday: retune the model on the newest results, retrain, and publish the next app version (1.1, 1.2, ...).
+# The app opens the published page (app.shell.html) when online, so the new version arrives without a new APK.
+name: weekly release
+
+on:
+  schedule:
+    - cron: "15 3 * * 1"         # Monday 08:45 India
+  workflow_dispatch:             # also lets you release by hand
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publish
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 200        # the fixes since the last release go into "What's new"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install requests numpy
+
+      - uses: actions/cache@v4
+        with:
+          path: cache_dota
+          key: cache-dota-${{ github.run_id }}
+          restore-keys: cache-dota-
+
+      - name: Retune
+        env:
+          PANDASCORE_TOKEN: ${{ secrets.PANDASCORE_TOKEN }}
+        run: python tune.py
+
+      - name: Train
+        env:
+          PANDASCORE_TOKEN: ${{ secrets.PANDASCORE_TOKEN }}
+        run: python trainer.py
+
+      - name: Version and build
+        run: |
+          python release.py
+          python build.py
+
+      - name: Publish
+        run: |
+          git config user.name "model bot"
+          git config user.email "bot@users.noreply.github.com"
+          git add -f tune.json release.json app.shell.html model.js
+          git commit -m "release v$(python -c 'import json;print(json.load(open("release.json"))["version"])')"
+          git pull --rebase -X theirs origin main || true
+          git push
+
+      - name: Refresh the CDN copies
+        run: |
+          sleep 5
+          for f in app.shell.html model.js release.json; do curl -s "https://purge.jsdelivr.net/gh/${{ github.repository }}@main/$f" || true; done

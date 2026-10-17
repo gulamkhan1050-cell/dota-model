@@ -30,6 +30,24 @@ SOS_N = 12                                                             # opponen
 FORM_N = 10
 H2H_N = 10
 TEST_FRACTION = 0.2
+L2 = 1.0                          # ridge strength of the logistic model
+CAP = 0.85                        # no single pro map / game is a lock: the app caps the per-map chance at this
+TUNE_FILE = "tune.json"           # written by the weekly release (tune.py): the settings that predicted recent results best
+
+
+def apply_tune(settings):
+    """Use the weekly-retuned settings (K_TEAM, K_PLAYER, L2, CAP) instead of the defaults above."""
+    g = globals()
+    for k, v in (settings or {}).items():
+        if k in ("K_TEAM", "K_PLAYER", "L2", "CAP"):
+            g[k] = float(v)
+
+
+if os.path.exists(TUNE_FILE):
+    try:
+        apply_tune(json.load(open(TUNE_FILE, encoding="utf-8")).get("settings"))
+    except Exception as e:
+        print(f"could not read {TUNE_FILE}: {e}")
 OUT = "model.json"
 CACHE_DIR = "cache_dota"
 API = "https://api.pandascore.co"
@@ -424,6 +442,44 @@ def calibration(p, y, bins=8):
 
 
 # ------------------------------------------------------------------ main
+def load_data(args):
+    """Past matches, tournament rosters and upcoming matches (cached in cache_dota, so a re-run only downloads what is new)."""
+    if args.demo:
+        matches, rosters, upcoming = demo_matches()
+    else:
+        matches = fetch_past_matches(args.months)
+        upcoming = fetch_upcoming(7, 1)
+        rosters = fetch_rosters(sorted({m["tournament_id"] for m in matches + upcoming if m["tournament_id"]}))
+        if not args.no_backup:
+            name2id = {}
+            for m in matches + upcoming:
+                name2id.setdefault(norm_team(m["name_a"]), m["team_a"]); name2id.setdefault(norm_team(m["name_b"]), m["team_b"])
+                if m.get("acr_a"): name2id.setdefault(norm_team(m["acr_a"]), m["team_a"])
+                if m.get("acr_b"): name2id.setdefault(norm_team(m["acr_b"]), m["team_b"])
+            matches = merge_sources(matches, fetch_opendota(args.months, name2id, set()))
+    return matches, rosters, upcoming
+
+
+def build_features(matches, rosters, market):
+    """Walk the matches in time order: features of every map / game from the ratings before it, then update the ratings."""
+    st = State(); X, y, ts, MK = [], [], [], []
+    no_roster = 0
+    for m in matches:
+        ros = rosters.get(str(m["tournament_id"]), {})
+        pa = ros.get(str(m["team_a"])) or []; pb = ros.get(str(m["team_b"])) or []
+        if not pa or not pb: no_roster += 1
+        # random orientation so the intercept doesn't learn "first listed team"
+        flip = random.Random(m["id"]).random() < 0.5
+        a, b, PA, PB = (m["team_b"], m["team_a"], pb, pa) if flip else (m["team_a"], m["team_b"], pa, pb)
+        mk = market_feats(market, m["ts"], m["name_b"] if flip else m["name_a"], m["name_a"] if flip else m["name_b"], 24)
+        for g in m["games"]:
+            X.append(st.features(a, b, PA, PB, m["ts"], m["tier"])); MK.append(mk); y.append(1.0 if g["winner"] == a else 0.0); ts.append(m["ts"])
+            st.update_map(a, b, PA, PB, g["winner"] == a, m["ts"], m["tier"], g.get("length"))
+        st.after_match(m, pa, pb)
+    X, y, MK = np.array(X), np.array(y), np.array(MK)
+    return st, X, y, ts, MK, no_roster
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--months", type=int, default=12); ap.add_argument("--demo", action="store_true")
@@ -446,37 +502,11 @@ def main():
             print(f"  could not read price history from {args.odds}: {e}")
         print(f"price history: {len(moves)} open markets with a movement series")
 
-    if args.demo:
-        matches, rosters, upcoming = demo_matches()
-    else:
-        matches = fetch_past_matches(args.months)
-        upcoming = fetch_upcoming(7, 1)
-        rosters = fetch_rosters(sorted({m["tournament_id"] for m in matches + upcoming if m["tournament_id"]}))
-        if not args.no_backup:
-            name2id = {}
-            for m in matches + upcoming:
-                name2id.setdefault(norm_team(m["name_a"]), m["team_a"]); name2id.setdefault(norm_team(m["name_b"]), m["team_b"])
-                if m.get("acr_a"): name2id.setdefault(norm_team(m["acr_a"]), m["team_a"])
-                if m.get("acr_b"): name2id.setdefault(norm_team(m["acr_b"]), m["team_b"])
-            matches = merge_sources(matches, fetch_opendota(args.months, name2id, set()))
+    matches, rosters, upcoming = load_data(args)
     if len(matches) < 300:
         sys.exit(f"only {len(matches)} matches - not enough. Try --months 18 or check the token.")
 
-    st = State(); X, y, ts, MK = [], [], [], []
-    no_roster = 0
-    for m in matches:
-        ros = rosters.get(str(m["tournament_id"]), {})
-        pa = ros.get(str(m["team_a"])) or []; pb = ros.get(str(m["team_b"])) or []
-        if not pa or not pb: no_roster += 1
-        # random orientation so the intercept doesn't learn "first listed team"
-        flip = random.Random(m["id"]).random() < 0.5
-        a, b, PA, PB = (m["team_b"], m["team_a"], pb, pa) if flip else (m["team_a"], m["team_b"], pa, pb)
-        mk = market_feats(market, m["ts"], m["name_b"] if flip else m["name_a"], m["name_a"] if flip else m["name_b"], 24)
-        for g in m["games"]:
-            X.append(st.features(a, b, PA, PB, m["ts"], m["tier"])); MK.append(mk); y.append(1.0 if g["winner"] == a else 0.0); ts.append(m["ts"])
-            st.update_map(a, b, PA, PB, g["winner"] == a, m["ts"], m["tier"], g.get("length"))
-        st.after_match(m, pa, pb)
-    X, y, MK = np.array(X), np.array(y), np.array(MK)
+    st, X, y, ts, MK, no_roster = build_features(matches, rosters, market)
     nr = sum(1 for m in matches for g in m["games"] if g.get("length"))
     print(f"\n{len(matches)} matches, {len(X)} games ({nr} with a length for margin-of-victory Elo), {no_roster} matches without roster data")
 
@@ -485,7 +515,7 @@ def main():
     evaluate("coin flip", np.full(len(yte), ytr.mean()), yte)
     evaluate("team elo only", 1 / (1 + 10 ** (-(Xte[:, 0] * 100) / 400)), yte)
     evaluate("player elo only", 1 / (1 + 10 ** (-(Xte[:, 1] * 100) / 400)), yte)
-    model = train_logistic(Xtr, ytr); pte = predict(model, Xte)
+    model = train_logistic(Xtr, ytr, L2); pte = predict(model, Xte)
     acc, ll, brier = evaluate("logistic (all feats)", pte, yte)
     MKtr, MKte = MK[:cut], MK[cut:]; hm = MKte[:, 1] > 0; stack = None
     if hm.sum() >= 30:
@@ -510,7 +540,7 @@ def main():
     cal = calibration(pte, yte); print("\ncalibration:")
     for r in cal: print(f"  {r['bin']}  n={r['n']:<4} predicted {r['predicted']:.2f}  actual {r['actual']:.2f}")
 
-    final = train_logistic(X, y)
+    final = train_logistic(X, y, L2)
     active_since = time.time() - args.active_days * 86400
     teams = {str(t): {"name": st.names.get(t, f"team {t}"), "acronym": st.acr.get(t, ""), "elo": round(st.team_elo[t], 1), "sos": round(st.sos(t), 1), "tier_avg": round(st.tier_avg(t), 2), "entry": st.entry.get(t, BASE),
                       "form": [int(v) for v in st.form[t]], "last_ts": st.last_ts.get(t, 0),
@@ -560,7 +590,8 @@ def main():
     recent = [{"id": m["id"], "ts": m["ts"], "a": str(m["team_a"]), "b": str(m["team_b"]), "winner": str(m["winner"]) if m.get("winner") else None,
                "score": [sum(1 for g in m["games"] if g["winner"] == m["team_a"]), sum(1 for g in m["games"] if g["winner"] == m["team_b"])]} for m in matches if m["ts"] >= now - 21 * 86400]
     out = {"game": "dota2", "as_of": datetime.now(timezone.utc).strftime("%Y-%m-%d"), "matches_used": len(matches), "games_used": int(len(X)),
-           "base": BASE, "form_n": FORM_N, "features": FEATURE_NAMES, "stack": stack, "version": 2,
+           "base": BASE, "form_n": FORM_N, "features": FEATURE_NAMES, "stack": stack, "version": 2, "cap": CAP,
+           "tune": {"K_TEAM": K_TEAM, "K_PLAYER": K_PLAYER, "L2": L2, "CAP": CAP},
            "model": {"w": [round(float(v), 6) for v in final["w"]], "b": round(float(final["b"]), 6),
                      "mu": [round(float(v), 6) for v in final["mu"]], "sd": [round(max(float(v), 1e-6), 6) for v in final["sd"]]},
            "holdout": {"n": int(len(yte)), "accuracy": round(float(acc), 4), "logloss": round(float(ll), 4), "brier": round(float(brier), 4), "calibration": cal},

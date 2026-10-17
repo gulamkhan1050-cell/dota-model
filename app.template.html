@@ -34,10 +34,12 @@
   dl.f{margin:8px 0 0;display:grid;grid-template-columns:auto 1fr 1fr;gap:4px 10px;font-size:12.5px}dl.f dt{color:var(--mute)}dl.f dd{margin:0;font-family:ui-monospace,Menlo,monospace}dl.f .hd{color:var(--mute);font-size:11px;text-transform:uppercase}
   dl.s{margin:0}dl.s div{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line)}dl.s dt{color:var(--mute);font-size:13px}dl.s dd{margin:0;font:600 16px/1 ui-monospace,Menlo,monospace}
   .empty{color:var(--mute);font-size:13px}
+  .grade{font-size:13px;padding:6px 10px;border-radius:6px;border:1px solid var(--line);margin-bottom:8px;color:var(--mute)}.grade b{color:var(--ink)}.grade.gA{border-color:rgba(125,200,98,.55)}.grade.gA b{color:var(--ok)}.grade.gB{border-color:rgba(240,182,70,.5)}.grade.gB b{color:var(--warn)}
 </style>
 </head>
 <body>
 <h1>Dota 2 predictor</h1>
+<div class="sub" id="ver" style="margin:0 0 4px"></div>
 <p class="sub" id="dataAge" style="margin:0 0 6px"></p>
 <p class="sub">Trained on <span id="mMaps"></span> maps from <span id="mMatches"></span> matches. Holdout accuracy <span id="mAcc"></span> per game. Ratings and rosters as of <span id="mAsOf"></span> (rerun the trainer daily).</p>
 <nav><button data-v="games" aria-pressed="true">Matches</button><button data-v="score" aria-pressed="false">Scoreboard</button><button data-v="any" aria-pressed="false">Any two</button></nav>
@@ -49,6 +51,7 @@
     <label class="sub" style="display:block;margin:0"><input type="checkbox" id="showAll"> Show matches with no market price too</label>
     <div id="log"></div>
   </div>
+  <div id="eiRec"></div>
   <div id="cards"></div>
 </section>
 
@@ -74,13 +77,15 @@
 </script>
 <script>
 var BAKED = __MODEL_JSON__;
+var REL = __RELEASE_JSON__;                    // this version's number and what changed (weekly release)
 var M = BAKED;
 (function(){                                   // use the published model when it is newer than the one baked into this build
   try{
     var R = window.MODEL_REMOTE;
-    if(R && R.as_of && (!BAKED.as_of || R.as_of >= BAKED.as_of) && R.teams && Object.keys(R.teams).length){ M = R; M.__remote = true; }
+    if(R && R.as_of && (!BAKED || !BAKED.as_of || R.as_of >= BAKED.as_of) && R.teams && Object.keys(R.teams).length){ M = R; M.__remote = true; }
   }catch(e){}
 })();
+if(!M){ document.body.innerHTML='<p style="padding:20px">Could not load the model: no internet and no copy on this phone yet. Connect once and reopen the app.</p>'; throw new Error("no model"); }
 var mem={}, LS=(function(){ try{ return window.localStorage; }catch(e){ return null; } })();
 function put(k,v){ try{ LS.setItem(k,JSON.stringify(v)); }catch(e){ mem[k]=v; } } function get(k){ try{ var v=LS.getItem(k); return v?JSON.parse(v):null; }catch(e){ return mem[k]||null; } }
 function keys(p){ var o=[]; try{ for(var i=0;i<LS.length;i++){ var k=LS.key(i); if(k.indexOf(p)===0) o.push(k);} }catch(e){ o=Object.keys(mem).filter(function(k){return k.indexOf(p)===0;}); } return o; }
@@ -108,7 +113,7 @@ function feats(a,b,pa,pb,now,tier){ var A=teamFeats(a,pa,now), B=teamFeats(b,pb,
 function lin(m,x){ var s=m.b; for(var i=0;i<m.w.length;i++) if(m.sd[i]>0) s+=(x[i]-m.mu[i])/m.sd[i]*m.w[i]; return s; }
 function gameProb(u,now){ var pa=u.roster_a.expected.map(function(p){return p.id;}), pb=u.roster_b.expected.map(function(p){return p.id;});
   var p1=sigmoid(lin(M.model,feats(u.a,u.b,pa,pb,now,u.tier))), p2=sigmoid(lin(M.model,feats(u.b,u.a,pb,pa,now,u.tier)));
-  var raw=(p1+1-p2)/2, CAP=0.85;            // no pro Dota game is a 92% lock, whatever the rating gap says
+  var raw=(p1+1-p2)/2, CAP=M.cap||0.85;            // no pro Dota game is a 92% lock, whatever the rating gap says
   return {p:Math.min(Math.max(raw,1-CAP),CAP), raw:raw, capped:(raw>CAP||raw<1-CAP)}; }
 function blend(pModel,pMkt){ if(pMkt==null) return {p:pModel,how:"model only, no market"}; if(M.stack) return {p:sigmoid(M.stack.a*logitF(pModel)+M.stack.b*logitF(pMkt)+M.stack.c),how:"stacked model+market"};
   return {p:sigmoid(0.35*logitF(pModel)+0.65*logitF(pMkt)),how:"default blend 35/65 (no stack fitted yet - keep the odds logger running)"}; }
@@ -178,7 +183,7 @@ function cardFor(u,host,rows,tag){ var now=Date.now()/1000; var A=M.teams[u.a], 
     el.innerHTML='<div class="t"><span class="a">'+A.name+'</span> v <span class="b">'+B.name+'</span></div><div class="meta">'+u.event+' &middot; Bo'+u.bo+' &middot; tier '+["","S/A","A","B","C","D"][u.tier]+' &middot; '+d.toLocaleDateString([],{weekday:"short",day:"numeric",month:"short"})+' '+d.toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})+'</div>'
       +(risks.length?'<div class="warnbox'+(risks.some(function(r){return /stand-in|change/.test(r);})?' red':'')+'">'+risks.join(" &middot; ")+'</div>':'')
       +'<div class="bar"><i style="width:'+(p*100).toFixed(1)+'%"></i></div><div class="pcts"><span style="color:var(--a)">'+A.name+' '+pct(p)+'</span><span style="color:var(--b)">'+B.name+' '+pct(1-p)+'</span></div>'
-      +'<div class="verdict '+vcls+'">'+verdict+'</div>'+moveHtml(u.any?null:moveFor(u),A,B,p)
+      +'<div class="verdict '+vcls+'">'+verdict+'</div>'+gradeHtml(u,p)+moveHtml(u.any?null:moveFor(u),A,B,p)
       +(done?'':'<div class="odds"><div><small>'+A.name+' odds</small><input inputmode="decimal" data-id="'+u.id+'" data-s="a" value="'+(man.a||"")+'" placeholder="'+(oa?oa.toFixed(2):"1.85")+'"></div><div><small>'+B.name+' odds</small><input inputmode="decimal" data-id="'+u.id+'" data-s="b" value="'+(man.b||"")+'" placeholder="'+(ob?ob.toFixed(2):"1.95")+'"></div><div><small>'+(src||"no market")+'</small></div></div>')
       +'<details><summary>Rosters, ranks, cohesion and model factors</summary><div class="ros">'+rosterHtml(u.roster_a,A)+rosterHtml(u.roster_b,B)+'</div>'
       +'<dl class="f"><dt></dt><dd class="hd">'+A.name+'</dd><dd class="hd">'+B.name+'</dd>'
@@ -233,6 +238,32 @@ function renderScore(){ settle(); var picks=keys("pick:").map(get).filter(functi
   $("score").innerHTML='<div><dt>Matches settled</dt><dd>'+picks.length+'</dd></div><div><dt>Favourite correct</dt><dd>'+right+' / '+picks.length+' ('+(100*right/picks.length).toFixed(1)+'%)</dd></div><div><dt>Brier: blended / model / market</dt><dd>'+brier.toFixed(3)+(bm.length?' / '+brierMod.toFixed(3)+' / '+brierM.toFixed(3):'')+'</dd></div>'
     +(bets.length?'<div><dt>Bets won</dt><dd>'+won.length+' / '+bets.length+'</dd></div><div><dt>Profit</dt><dd>'+(units>=0?'+':'')+units.toFixed(2)+'u on '+risked.toFixed(2)+'u ('+(100*units/Math.max(risked,0.01)).toFixed(1)+'% ROI)</dd></div>':'')
     +(big.length?'<div><dt>"Suspicious" 8%+ edges won</dt><dd>'+bigW+' / '+big.length+'</dd></div>':''); }
+/* ---------------- version and what's new ---------------- */
+function escH(s){ return String(s==null?"":s).replace(/[&<>"]/g,function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]; }); }
+(function(){ var v=$("ver"); if(!v||!REL||!REL.version) return;
+  v.innerHTML='<b style="color:var(--ink)">v'+escH(REL.version)+'</b> &middot; '+escH(REL.date||"")+' <details style="border:0;padding:0;margin:2px 0 0"><summary>What&rsquo;s new</summary>'
+    +(REL.history||[]).slice(0,4).map(function(h){ return '<div style="margin:6px 0 0"><b>v'+escH(h.version)+'</b> <span>'+escH(h.date||"")+'</span><ul style="margin:2px 0 0;padding-left:18px">'
+      +(h.notes||[]).map(function(n){ return '<li>'+escH(n)+'</li>'; }).join("")+'</ul></div>'; }).join("")+'</details>'; })();
+
+/* ---------------- Esports Intel grade: A/B picks from roster, form, h2h, standings and sharp money, locked 1 minute before the start ---------------- */
+var EI="https://esports-intel.onrender.com", EI_TITLE="dota2", GR=get("ei_grades");
+function gradeFor(u){ if(!GR||!GR.matches||u.any||!u.ts) return null; var A=M.teams[u.a], B=M.teams[u.b], hit=null;
+  GR.matches.forEach(function(g){ var t=Date.parse(g.start)/1000; if(!t||Math.abs(t-u.ts)>8*3600) return;
+    var same=sameTeam(g.t1,A.name)&&sameTeam(g.t2,B.name), swap=sameTeam(g.t1,B.name)&&sameTeam(g.t2,A.name);
+    if(same||swap) hit={g:g,swap:swap}; });
+  return hit; }
+function gradeHtml(u,p){ var h=gradeFor(u); if(!h) return ""; var A=M.teams[u.a], B=M.teams[u.b];
+  return h.g.picks.map(function(k){ var side=k.side==="t1"?(h.swap?"b":"a"):k.side==="t2"?(h.swap?"a":"b"):null;
+    var agree=side?((side==="a")===(p>=0.5)):null;
+    var res=k.result==="win"?' &middot; <span style="color:var(--ok)">won</span>':k.result==="loss"?' &middot; <span style="color:var(--bad)">lost</span>':"";
+    return '<div class="grade g'+escH(k.grade)+'">Esports Intel <b>'+escH(k.grade)+'</b> &middot; '+escH(k.pick||(side==="a"?A.name:side==="b"?B.name:""))+(k.locked?" &#128274;":" &#128275;")
+      +(agree===null?"":agree?' &middot; agrees with this model':' &middot; <span style="color:var(--warn)">this model disagrees</span>')+res+'</div>'; }).join(""); }
+function renderRecord(){ var el=$("eiRec"); if(!el) return; if(!GR||!GR.record){ el.innerHTML=""; return; } var r=GR.record, f=function(x){ return x?(x.won+"&ndash;"+x.lost+(x.won+x.lost?" ("+Math.round(100*x.won/(x.won+x.lost))+"%)":"")):"&ndash;"; };
+  el.innerHTML='<div class="card"><h2>Esports Intel graded picks &middot; Dota 2</h2><div class="sub" style="margin:0">A: <b style="color:var(--ink)">'+f(r.A)+'</b> &middot; B: <b style="color:var(--ink)">'+f(r.B)+'</b> won&ndash;lost &middot; grades lock 1 minute before the start &middot; <a style="color:var(--a)" href="'+EI+'/#/upcoming">open Esports Intel</a></div></div>'; }
+async function loadGrades(){ try{ var c=(typeof AbortController!=="undefined")?new AbortController():null; var t=setTimeout(function(){ if(c) c.abort(); },25000);
+  var r=await fetch(EI+"/api/grades?title="+EI_TITLE,c?{signal:c.signal}:{}); clearTimeout(t); var j=await r.json();
+  if(j&&j.matches){ GR=j; GR.at=Date.now(); put("ei_grades",GR); render(); renderRecord(); if(j.building) setTimeout(loadGrades,60000); } }catch(e){} }
+renderRecord(); loadGrades();
 var pc=get("pm_cache"); if(pc&&Date.now()-pc.at<6*3600e3) PM=pc.pm||[]; render(); renderScore(); if(!PM.length) refresh();
 </script>
 </body>

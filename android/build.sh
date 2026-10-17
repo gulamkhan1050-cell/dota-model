@@ -5,16 +5,16 @@
 #   ANDROID_JAR android.jar, API 24+  (e.g. https://raw.githubusercontent.com/Sable/android-platforms/master/android-30/android.jar)
 #   DX_JAR      https://repo1.maven.org/maven2/com/jakewharton/android/repackaged/dalvik-dx/16.0.1/dalvik-dx-16.0.1.jar
 #   APKSIG_JAR  https://repo1.maven.org/maven2/com/android/tools/build/apksig/2.3.0/apksig-2.3.0.jar
-# The page itself comes from ../app.html (run build.py first); it is packed in as assets/index.html.
+# The page comes from ../loader.html (run build.py first), packed in as assets/index.html: online it opens the weekly published page.
 # Signing key: android/keystore.jks, kept in the repo (owner's choice) so every build, here or on GitHub,
 # installs as an update over the app already on the phone (a phone only accepts the same key).
 set -e
 cd "$(dirname "$0")"
 : "${AAPT2:?set AAPT2}" "${ANDROID_JAR:?set ANDROID_JAR}" "${DX_JAR:?set DX_JAR}" "${APKSIG_JAR:?set APKSIG_JAR}"
 KEYSTORE=${KEYSTORE:-keystore.jks}; KEYSTORE_PASS=${KEYSTORE_PASS:-dotamodel}; KEY_ALIAS=${KEY_ALIAS:-dotamodel}
-[ -f ../app.html ] || { echo "app.html missing: run python build.py first"; exit 1; }
+[ -f ../loader.html ] || { echo "loader.html missing: run python build.py first"; exit 1; }
 rm -rf build && mkdir -p build/gen build/classes build/res build/dex build/tools build/assets
-cp ../app.html build/assets/index.html
+cp ../loader.html build/assets/index.html
 "$AAPT2" compile --dir res -o build/res/res.zip
 "$AAPT2" link -o build/unsigned.apk -I "$ANDROID_JAR" --manifest AndroidManifest.xml -A build/assets --java build/gen build/res/res.zip
 javac -nowarn -Xlint:-options --release 8 -classpath "$ANDROID_JAR" -d build/classes \
