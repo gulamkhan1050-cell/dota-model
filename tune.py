@@ -43,7 +43,7 @@ def holdout(matches, rosters, market, k_team, k_player):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--months", type=int, default=12); ap.add_argument("--demo", action="store_true")
+    ap.add_argument("--months", type=int, default=T.MONTHS)  # same window as the trainer, so the cache is not cut back; ap.add_argument("--demo", action="store_true")
     ap.add_argument("--no-backup", action="store_true"); ap.add_argument("--odds", default="odds_log.json")
     ap.add_argument("--out", default=T.TUNE_FILE); args = ap.parse_args()
     current = {"K_TEAM": T.K_TEAM, "K_PLAYER": T.K_PLAYER, "L2": T.L2, "CAP": T.CAP}
