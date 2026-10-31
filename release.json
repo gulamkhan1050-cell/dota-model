@@ -1,8 +1,19 @@
 {
- "version": "1.5",
- "date": "2026-10-28",
- "commit": "52789f171c7f278244b93a01b8b98a4f0777c0ab",
+ "version": "1.6",
+ "date": "2026-10-31",
+ "commit": "69a0561e063fd539d606b05a6bf6e3186f4fe5b9",
  "history": [
+  {
+   "version": "1.6",
+   "date": "2026-10-31",
+   "notes": [
+    "Model settings re-checked on the newest 2803 games (27 combinations): the current ones are still the best",
+    "Last 7 days: 180 maps/games, 63.3% picked right",
+    "Data: 6,722 matches, 490 teams, holdout accuracy 64.2% per map",
+    "Fix: tune.py: fix the --demo option hidden behind a comment (broke the retune)",
+    "Fix: Data check every run: month by month against PandaScore's totals, any missing matches (old or new) downloaded again; failed lineups retried; 18 months of history"
+   ]
+  },
   {
    "version": "1.5",
    "date": "2026-10-28",
