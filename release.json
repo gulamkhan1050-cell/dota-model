@@ -1,8 +1,18 @@
 {
- "version": "1.8",
- "date": "2026-11-05",
- "commit": "59aceed539dd72c7e1b18d859324fa09a4662659",
+ "version": "1.9",
+ "date": "2026-11-07",
+ "commit": "8e7246240e20c07ebfeb6ae87520d7021215562e",
  "history": [
+  {
+   "version": "1.9",
+   "date": "2026-11-07",
+   "notes": [
+    "Model settings re-checked on the newest 2812 games (27 combinations): the current ones are still the best",
+    "Last 7 days: 193 maps/games, 71.5% picked right",
+    "Data: 6,747 matches, 485 teams, holdout accuracy 64.8% per map",
+    "Fix: Lineups of tournaments being played now or next are read again every run (stand-ins and swaps mid-event were missed); a failed re-read keeps the old lineup; three training runs a day"
+   ]
+  },
   {
    "version": "1.8",
    "date": "2026-11-05",
